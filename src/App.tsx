@@ -114,14 +114,20 @@ const CONTROLS: Control[] = [
 
 type AnalysisState = { status: "running" } | { status: "done"; data: Analysis } | { status: "error" } | null;
 
-type AnalysisRow = { label: string; value: (a: Analysis) => string; num?: (a: Analysis) => number; digits?: number };
+type AnalysisRow = {
+  label: string;
+  icon: () => ReactNode;
+  value: (a: Analysis) => string;
+  num?: (a: Analysis) => number;
+  digits?: number;
+};
 
 const ANALYSIS_ROWS: AnalysisRow[] = [
-  { label: "Tempo", value: (a) => `${fmt(a.bpm, 1)} BPM`, num: (a) => a.bpm, digits: 1 },
-  { label: "Tonalité", value: keyLabel },
-  { label: "Loudness intégrée", value: (a) => `${fmt(a.lufs, 1)} LUFS`, num: (a) => a.lufs, digits: 1 },
-  { label: "Plage de loudness", value: (a) => `${fmt(a.lra, 1)} LU`, num: (a) => a.lra, digits: 1 },
-  { label: "Complexité dynamique", value: (a) => `${fmt(a.dynamic, 2)} dB`, num: (a) => a.dynamic, digits: 2 },
+  { label: "Tempo", icon: ClockIcon, value: (a) => `${fmt(a.bpm, 1)} BPM`, num: (a) => a.bpm, digits: 1 },
+  { label: "Tonalité", icon: NoteIcon, value: keyLabel },
+  { label: "Loudness intégrée", icon: SpeakerIcon, value: (a) => `${fmt(a.lufs, 1)} LUFS`, num: (a) => a.lufs, digits: 1 },
+  { label: "Plage de loudness", icon: WaveIcon, value: (a) => `${fmt(a.lra, 1)} LU`, num: (a) => a.lra, digits: 1 },
+  { label: "Complexité dynamique", icon: LayersIcon, value: (a) => `${fmt(a.dynamic, 2)} dB`, num: (a) => a.dynamic, digits: 2 },
 ];
 
 function analysisCell(state: AnalysisState, row: AnalysisRow) {
@@ -183,7 +189,40 @@ const PRESET_LABELS: Record<string, string> = {
   appuye: "Appuyé",
 };
 
+const PRESET_NOTES: Record<string, string> = {
+  discret: "Corrections légères, pour garder le caractère du titre.",
+  standard: "Dosage par défaut, entre naturel et correction.",
+  appuye: "Corrections plus marquées, au risque d'abîmer le son.",
+};
+
+const NAV = [
+  { id: "reglages", label: "Retouche", icon: SparkIcon },
+  { id: "analyse", label: "Analyse", icon: WaveIcon },
+  { id: "resultat", label: "Résultats", icon: LayersIcon },
+];
+
 const trackNumber = (i: number) => String(i + 1).padStart(2, "0");
+
+function useActiveSection(ids: string[], deps: unknown[]) {
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    const els = ids.map((id) => document.getElementById(id)?.closest("section")).filter((el): el is HTMLElement => !!el);
+    if (!els.length) return;
+    const seen = new Map<Element, boolean>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => seen.set(e.target, e.isIntersecting));
+        const first = els.find((el) => seen.get(el));
+        setActive(first ? (first.querySelector("h2[id]")?.id ?? null) : null);
+      },
+      { rootMargin: "-30% 0px -55% 0px" },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return active;
+}
 
 const prefersReducedMotion = () =>
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -451,6 +490,11 @@ export default function App() {
     setTime(t);
   };
 
+  const activeNav = useActiveSection(
+    NAV.map((n) => n.id),
+    [!!loaded, !!result],
+  );
+
   return (
     <div className="page">
       {dragging && (
@@ -464,8 +508,22 @@ export default function App() {
 
       <header className="topbar">
         <p className="logo">
+          <LogoMark />
           Dés-<span>IA</span>
         </p>
+        {loaded && (
+          <nav className="nav" aria-label="Sections">
+            {NAV.filter((n) => n.id !== "resultat" || result).map((n) => {
+              const NavIcon = n.icon;
+              return (
+                <a key={n.id} href={`#${n.id}`} aria-current={activeNav === n.id ? "location" : undefined}>
+                  <NavIcon />
+                  {n.label}
+                </a>
+              );
+            })}
+          </nav>
+        )}
         <p className="stamp">
           <LockIcon />
           Traitement dans ton navigateur
@@ -481,13 +539,13 @@ export default function App() {
             Huit traitements, du timing au souffle de pièce, appliqués dans ton navigateur. Tu compares
             l'original et le résultat, puis tu télécharges un WAV 24 bits.
           </p>
-          <button type="button" className="btn btn--primary btn--lg" onClick={() => inputRef.current?.click()}>
+          <button type="button" className="btn btn--warm btn--lg" onClick={() => inputRef.current?.click()}>
             <UploadIcon />
             Choisir un fichier audio
           </button>
         </div>
-        <div className="hero__frame">
-          <img className="hero__img" src="/studio.webp" alt="" width={1200} height={800} />
+        <div className="hero__art">
+          <img className="hero__img" src="/illustration.webp" alt="" width={1536} height={1024} />
         </div>
       </section>
 
@@ -573,7 +631,10 @@ export default function App() {
                   const delta = analysisDelta(anaOrig, anaProc, row);
                   return (
                     <tr key={row.label}>
-                      <th scope="row">{row.label}</th>
+                      <th scope="row">
+                        <span className="analysis__icon">{row.icon()}</span>
+                        {row.label}
+                      </th>
                       <td className={anaOrig?.status === "done" ? "" : "is-wait"}>
                         <span className="analysis__value">{analysisCell(anaOrig, row)}</span>
                       </td>
@@ -605,19 +666,29 @@ export default function App() {
 
         {loaded && (
           <section className="card presets" aria-labelledby="presets-title">
-            <span className="icon-box">
-              <SlidersIcon />
-            </span>
-            <div className="presets__text">
-              <h2 id="presets-title">Préréglages</h2>
-              <p className="sub">
-                {preset ? "Trois dosages de départ, à ajuster ensuite." : "Réglages personnalisés."}
-              </p>
+            <div className="card__head">
+              <span className="icon-box icon-box--warm">
+                <SlidersIcon />
+              </span>
+              <div>
+                <h2 id="presets-title">Préréglages</h2>
+                <p className="sub">
+                  {preset ? "Trois dosages de départ, à ajuster ensuite." : "Réglages personnalisés."}
+                </p>
+              </div>
             </div>
-            <div className="segmented" role="group" aria-labelledby="presets-title">
+            <div className="presets__grid" role="group" aria-labelledby="presets-title">
               {Object.keys(PRESETS).map((key) => (
-                <button key={key} type="button" aria-pressed={preset === key} onClick={() => applyPreset(key)}>
-                  {PRESET_LABELS[key] ?? key}
+                <button
+                  key={key}
+                  type="button"
+                  className="preset"
+                  aria-pressed={preset === key}
+                  onClick={() => applyPreset(key)}
+                >
+                  <span className="preset__dot" aria-hidden="true" />
+                  <span className="preset__name">{PRESET_LABELS[key] ?? key}</span>
+                  {PRESET_NOTES[key] && <span className="preset__note">{PRESET_NOTES[key]}</span>}
                 </button>
               ))}
             </div>
@@ -630,8 +701,12 @@ export default function App() {
               <span className="icon-box">
                 <WaveIcon />
               </span>
-              <h2 id="reglages">Réglages</h2>
-              <span className="card__range">{CONTROLS.length} traitements</span>
+              <div>
+                <h2 id="reglages">
+                  Réglages <span className="card__range">{CONTROLS.length} traitements</span>
+                </h2>
+                <p className="sub">Active, désactive et dose chaque traitement.</p>
+              </div>
             </div>
 
             <ol className="tracks">
@@ -705,7 +780,8 @@ export default function App() {
                 <option value={48000}>48 000 Hz (standard diffusion)</option>
                 <option value={44100}>44 100 Hz (CD)</option>
               </select>
-              <button type="button" className="btn btn--primary" onClick={() => void run()} disabled={busy}>
+              <button type="button" className="btn btn--warm" onClick={() => void run()} disabled={busy}>
+                <RefreshIcon />
                 {busy ? "Traitement en cours…" : result ? "Relancer le traitement" : "Retravailler le titre"}
               </button>
             </div>
@@ -807,18 +883,22 @@ export default function App() {
 
             <dl className="facts">
               <div>
+                <ClockIcon />
                 <dt>Durée</dt>
                 <dd>{formatTime(result.buffer.duration)}</dd>
               </div>
               <div>
+                <WaveIcon />
                 <dt>Format</dt>
                 <dd>WAV 24 bits · {result.buffer.sampleRate} Hz</dd>
               </div>
               <div>
+                <PulseIcon />
                 <dt>Crête</dt>
                 <dd>{fmt(20 * Math.log10(peakOf(result.buffer) || 1), 1)} dBFS</dd>
               </div>
               <div>
+                <DatabaseIcon />
                 <dt>Poids</dt>
                 <dd>{fmt(result.blob.size / 1048576, 1)} Mo</dd>
               </div>
@@ -851,7 +931,6 @@ export default function App() {
                   </li>
                 ))}
               </ol>
-              <p className="sleeve__sticker">Traitement local</p>
             </div>
           </div>
           <div className="note__text">
@@ -902,6 +981,83 @@ function Icon({ size = 22, children }: { size?: number; children: ReactNode }) {
     >
       {children}
     </svg>
+  );
+}
+
+function LogoMark() {
+  return (
+    <svg className="logo__mark" viewBox="0 0 40 32" width="40" height="32" aria-hidden="true">
+      <path d="M11 28a9 9 0 0 1-1.4-17.9A12 12 0 0 1 32.5 12 8 8 0 0 1 31 28z" fill="currentColor" />
+      <path d="M14 18v4M18 15v10M22 13v14M26 16v8" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <Icon size={18}>
+      <path d="M4 20l9-9M14 4v3M18 6l-2 2M20 10h-3M15 9l-2 2" />
+    </Icon>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <Icon size={20}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Icon>
+  );
+}
+
+function NoteIcon() {
+  return (
+    <Icon size={20}>
+      <path d="M9 18V5l11-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="17" cy="16" r="3" />
+    </Icon>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <Icon size={20}>
+      <path d="M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </Icon>
+  );
+}
+
+function LayersIcon() {
+  return (
+    <Icon size={20}>
+      <path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" />
+    </Icon>
+  );
+}
+
+function PulseIcon() {
+  return (
+    <Icon size={20}>
+      <path d="M3 12h4l3-7 4 14 3-7h4" />
+    </Icon>
+  );
+}
+
+function DatabaseIcon() {
+  return (
+    <Icon size={20}>
+      <ellipse cx="12" cy="5" rx="8" ry="3" />
+      <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+    </Icon>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <Icon size={20}>
+      <path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4" />
+    </Icon>
   );
 }
 

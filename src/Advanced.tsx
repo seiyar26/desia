@@ -241,6 +241,7 @@ export default function Advanced({ file, duration }: { file: File | null; durati
         </div>
       </div>
 
+      <div className="adv__intro">
       <table className="adv__tools">
         <thead>
           <tr>
@@ -258,6 +259,7 @@ export default function Advanced({ file, duration }: { file: File | null; durati
         </tbody>
       </table>
 
+      <div className="adv__panel">
       <p className="adv__consent">
         Contrairement au reste de l'outil, cette analyse <strong>envoie ton fichier</strong> à notre serveur. Il y
         est effacé une heure après l'analyse, avec tous les résultats. Compte environ 15 minutes pour un titre de
@@ -285,6 +287,8 @@ export default function Advanced({ file, duration }: { file: File | null; durati
       {(tooLong || tooBig) && (
         <p className="adv__fail">Le serveur accepte 10 minutes et 100 Mo au plus. Ce fichier dépasse cette limite.</p>
       )}
+      </div>
+      </div>
 
       {error && (
         <p className="error" role="alert">
