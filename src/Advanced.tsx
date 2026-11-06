@@ -48,12 +48,12 @@ type Job = {
 };
 
 export const TOOLS = [
-  { name: "Essentia", what: "Tempo, tonalité, ambiance, genre, dansabilité", url: "https://github.com/MTG/essentia" },
-  { name: "librosa", what: "Tempo, spectre, timbre", url: "https://github.com/librosa/librosa" },
-  { name: "Demucs", what: "Sépare voix, basse, batterie et le reste", url: "https://github.com/adefossez/demucs" },
-  { name: "All-In-One", what: "Temps, mesures, sections (intro, refrain…)", url: "https://github.com/mir-aidj/all-in-one" },
-  { name: "Basic Pitch", what: "Notes jouées, exportées en MIDI", url: "https://github.com/spotify/basic-pitch" },
-  { name: "Audio Flamingo", what: "Description du morceau en texte", url: "https://github.com/NVIDIA/audio-flamingo" },
+  { name: "Essentia", what: "Tempo, tonalité, ambiance, genre, dansabilité" },
+  { name: "librosa", what: "Tempo, spectre, timbre" },
+  { name: "Demucs", what: "Sépare voix, basse, batterie et le reste" },
+  { name: "All-In-One", what: "Temps, mesures, sections (intro, refrain…)" },
+  { name: "Basic Pitch", what: "Notes jouées, exportées en MIDI" },
+  { name: "Audio Flamingo", what: "Description du morceau en texte" },
 ];
 
 const SECTION_FR: Record<string, string> = {
@@ -251,11 +251,7 @@ export default function Advanced({ file, duration }: { file: File | null; durati
         <tbody>
           {TOOLS.map((t) => (
             <tr key={t.name}>
-              <th scope="row">
-                <a href={t.url} target="_blank" rel="noreferrer">
-                  {t.name}
-                </a>
-              </th>
+              <th scope="row">{t.name}</th>
               <td>{t.what}</td>
             </tr>
           ))}
