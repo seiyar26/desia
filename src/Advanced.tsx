@@ -285,6 +285,7 @@ export default function Advanced({ file, duration }: { file: File | null; durati
           {job ? "Relancer l'analyse avancée" : "Envoyer pour l'analyse avancée"}
         </button>
       </div>
+      {!file && <p className="adv__wait adv__hint">Dépose d'abord un titre en haut de la page pour l'envoyer.</p>}
       {(tooLong || tooBig) && (
         <p className="adv__fail">Le serveur accepte 10 minutes et 100 Mo au plus. Ce fichier dépasse cette limite.</p>
       )}

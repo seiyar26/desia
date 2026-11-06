@@ -837,7 +837,7 @@ export default function App() {
           </section>
         )}
 
-        {loaded && <Advanced file={loaded.file} duration={loaded.buffer.duration} />}
+        <Advanced file={loaded?.file ?? null} duration={loaded?.buffer.duration ?? 0} />
 
         <section className="card note" aria-labelledby="note-title">
           <div className="sleeve" aria-hidden="true">

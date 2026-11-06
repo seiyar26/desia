@@ -1658,3 +1658,7 @@ select {
     transform: none !important;
   }
 }
+
+.adv__hint {
+  margin-top: 10px;
+}
