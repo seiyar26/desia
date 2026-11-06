@@ -242,52 +242,52 @@ export default function Advanced({ file, duration }: { file: File | null; durati
       </div>
 
       <div className="adv__intro">
-      <table className="adv__tools">
-        <thead>
-          <tr>
-            <th scope="col">Outil</th>
-            <th scope="col">Ce qu'il analyse</th>
-          </tr>
-        </thead>
-        <tbody>
-          {TOOLS.map((t) => (
-            <tr key={t.name}>
-              <th scope="row">{t.name}</th>
-              <td>{t.what}</td>
+        <table className="adv__tools">
+          <thead>
+            <tr>
+              <th scope="col">Outil</th>
+              <th scope="col">Ce qu'il analyse</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {TOOLS.map((t) => (
+              <tr key={t.name}>
+                <th scope="row">{t.name}</th>
+                <td>{t.what}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      <div className="adv__panel">
-      <p className="adv__consent">
-        Contrairement au reste de l'outil, cette analyse <strong>envoie ton fichier</strong> à notre serveur. Il y
-        est effacé une heure après l'analyse, avec tous les résultats. Compte environ 15 minutes pour un titre de
-        3 minutes, 20 avec la description.
-      </p>
+        <div className="adv__panel">
+          <p className="adv__consent">
+            Contrairement au reste de l'outil, cette analyse <strong>envoie ton fichier</strong> à notre serveur. Il y
+            est effacé une heure après l'analyse, avec tous les résultats. Compte environ 5 minutes pour un titre de 3
+            minutes, 10 avec la description.
+          </p>
 
-      <div className="adv__send">
-        <label className="adv__check">
-          <span className="track__toggle">
-            <input type="checkbox" checked={describe} onChange={(e) => setDescribe(e.target.checked)} />
-          </span>
-          Ajouter une description en anglais (Audio Flamingo, environ 5 min de plus)
-        </label>
-        <button
-          type="button"
-          className="btn btn--outline"
-          onClick={send}
-          disabled={!file || sending || running || tooLong || tooBig}
-        >
-          <SendIcon />
-          {job ? "Relancer l'analyse avancée" : "Envoyer pour l'analyse avancée"}
-        </button>
-      </div>
-      {!file && <p className="adv__wait adv__hint">Dépose d'abord un titre en haut de la page pour l'envoyer.</p>}
-      {(tooLong || tooBig) && (
-        <p className="adv__fail">Le serveur accepte 10 minutes et 100 Mo au plus. Ce fichier dépasse cette limite.</p>
-      )}
-      </div>
+          <div className="adv__send">
+            <label className="adv__check">
+              <span className="track__toggle">
+                <input type="checkbox" checked={describe} onChange={(e) => setDescribe(e.target.checked)} />
+              </span>
+              Ajouter une description en anglais (Audio Flamingo, environ 5 min de plus)
+            </label>
+            <button
+              type="button"
+              className="btn btn--outline"
+              onClick={send}
+              disabled={!file || sending || running || tooLong || tooBig}
+            >
+              <SendIcon />
+              {job ? "Relancer l'analyse avancée" : "Envoyer pour l'analyse avancée"}
+            </button>
+          </div>
+          {!file && <p className="adv__wait adv__hint">Dépose d'abord un titre en haut de la page pour l'envoyer.</p>}
+          {(tooLong || tooBig) && (
+            <p className="adv__fail">Le serveur accepte 10 minutes et 100 Mo au plus. Ce fichier dépasse cette limite.</p>
+          )}
+        </div>
       </div>
 
       {error && (

@@ -34,4 +34,4 @@ ssh lexi 'cd /opt/desia-api && docker compose up -d --build'
 
 Audio Flamingo (≈ 17 Go) : le téléchargement via `huggingface_hub` bloque depuis ce VPS. Le pré-charger une fois dans le volume `desia-cache` avec `curl` vers `/cache/af3` (config, tokenizer et 4 fichiers `model-0000N-of-00004.safetensors` de `https://huggingface.co/nvidia/audio-flamingo-3-hf/resolve/main/`). Sans ce dossier, le runner retombe sur le Hub.
 
-Mesures sur un titre de 2 min 41 (8 cœurs, sans GPU) : librosa 33 s, Demucs 99 s, all-in-one 525 s, Essentia 7 s, Basic Pitch 30 s, Audio Flamingo 313 s (≈ 19 Go de RAM). Total ≈ 17 min avec description, ≈ 12 min sans.
+Mesures sur un titre de 2 min 41 (8 cœurs, 6 alloués au conteneur, sans GPU) : Demucs 120 s, puis all-in-one 136 s (ses 8 réseaux tournent chacun dans son processus, ≈ 6,5 Go de RAM au pic) ; librosa 41 s, Essentia 8 s et Basic Pitch 34 s tournent pendant Demucs. Audio Flamingo ajoute ≈ 313 s (≈ 19 Go de RAM). Total ≈ 4 min 30 sans description, ≈ 10 min avec.

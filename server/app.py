@@ -42,9 +42,9 @@ pending: "queue.Queue[str]" = queue.Queue()
 order: list[str] = []  # ids en file d'attente
 
 
-def run_py(venv, script, args, timeout, timings_key=None):
+def run_py(venv, script, args, timeout, stats):
     """Lance un runner dans son venv, renvoie le JSON de la dernière ligne stdout.
-    Mesure la RAM maximale (somme RSS de l'arbre de processus)."""
+    Remplit `stats` : durée et RAM maximale (somme RSS de l'arbre de processus)."""
     env = {**os.environ, "OMP_NUM_THREADS": THREADS, "MKL_NUM_THREADS": THREADS, "OPENBLAS_NUM_THREADS": THREADS,
            "TF_NUM_INTRAOP_THREADS": THREADS, "TF_CPP_MIN_LOG_LEVEL": "3", "NUMBA_NUM_THREADS": THREADS}
     cmd = ["nice", "-n", "10", str(VENV / venv / "bin/python"), str(RUNNERS / script), *map(str, args)]
@@ -78,7 +78,7 @@ def run_py(venv, script, args, timeout, timings_key=None):
         raise RuntimeError(f"délai dépassé ({timeout // 60} min)")
     finally:
         stop.set()
-        run_py.last = {"seconds": round(time.time() - t0, 1), "peak_rss_mb": round(peak / 1048576)}
+        stats.update(seconds=round(time.time() - t0, 1), peak_rss_mb=round(peak / 1048576))
     if p.returncode != 0:
         tail = (err or "").strip().splitlines()[-3:]
         raise RuntimeError(f"code {p.returncode}: " + " | ".join(tail)[-400:])
@@ -86,9 +86,6 @@ def run_py(venv, script, args, timeout, timings_key=None):
     if not lines:
         raise RuntimeError("sortie vide")
     return json.loads(lines[-1])
-
-
-run_py.last = {}
 
 
 def sh(cmd, timeout=300):
@@ -103,16 +100,23 @@ def run_job(job):
     wav = d / "audio.wav"
     demix = d / "demix"
     res = job["results"]
+    running: list[str] = []
+    state = threading.Lock()
 
     def step(key, fn, venv, script, args):
-        job["step"] = LABELS[key]
+        with state:
+            running.append(LABELS[key])
+            job["step"] = " · ".join(running)
+        stats = {}
         try:
-            res[key] = fn(run_py(venv, script, args, STEP_TIMEOUT.get(key, DEFAULT_TIMEOUT)))
+            res[key] = fn(run_py(venv, script, args, STEP_TIMEOUT.get(key, DEFAULT_TIMEOUT), stats))
         except Exception as e:  # une étape en échec n'arrête pas les suivantes
             res[key] = {"error": str(e)[:500]}
-            run_py.last = getattr(run_py, "last", {})
-        job["timings"][key] = dict(run_py.last)
-        job["steps_done"].append(LABELS[key])
+        with state:
+            job["timings"][key] = stats
+            running.remove(LABELS[key])
+            job["step"] = " · ".join(running) or None
+            job["steps_done"].append(LABELS[key])
 
     job["step"] = LABELS["prep"]
     r = sh(["ffmpeg", "-y", "-v", "error", "-i", str(job["src"]), "-vn", "-ac", "2", "-ar", "44100",
@@ -122,8 +126,18 @@ def run_job(job):
         return
     job["src"].unlink(missing_ok=True)
     job["steps_done"].append(LABELS["prep"])
+    job["step"] = None
 
-    step("librosa", lambda o: o, "main", "librosa_run.py", [wav])
+    # Les analyses légères tournent pendant la séparation et la structure, qui dominent le temps.
+    midi = files / "notes.mid"
+
+    def light():
+        step("librosa", lambda o: o, "main", "librosa_run.py", [wav])
+        step("essentia", lambda o: o, "essentia", "essentia_run.py", [wav])
+        step("basic_pitch", lambda o: {**o, "midi": midi.name}, "bp", "basic_pitch_run.py", [wav, midi])
+
+    side = threading.Thread(target=light, daemon=True)
+    side.start()
 
     def demucs_post(_):
         stems = {}
@@ -141,15 +155,13 @@ def run_job(job):
     if "error" not in res["demucs"]:
         step("allin1", lambda o: o, "allin1", "allin1_run.py", [wav, demix, d / "spec"])
     else:
-        job["step"] = LABELS["allin1"]
         res["allin1"] = {"error": "séparation des pistes indisponible"}
-        job["steps_done"].append(LABELS["allin1"])
+        with state:
+            job["steps_done"].append(LABELS["allin1"])
     shutil.rmtree(demix, ignore_errors=True)
     shutil.rmtree(d / "spec", ignore_errors=True)
+    side.join()
 
-    step("essentia", lambda o: o, "essentia", "essentia_run.py", [wav])
-    midi = files / "notes.mid"
-    step("basic_pitch", lambda o: {**o, "midi": midi.name}, "bp", "basic_pitch_run.py", [wav, midi])
     if job["describe"]:
         step("flamingo", lambda o: o, "flamingo", "flamingo_run.py", [wav])
     wav.unlink(missing_ok=True)

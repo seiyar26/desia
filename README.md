@@ -15,7 +15,9 @@ Chaîne de traitement local sur l'audio décodé :
 5. variation de niveau lente
 6. bruit de pièce filtré et modulé
 7. retard stéréo léger
-8. limiteur, normalisation à la crête d'origine
+8. normalisation à la crête d'origine, sans limiteur ni écrêtage (rendu en virgule flottante)
+
+Le rééchantillonnage et le micro-timing lisent le signal par sinus cardinal fenêtré (Kaiser, 32 points), et la saturation de l'exciter est suréchantillonnée ×4, pour ne pas ajouter de grésillement dans les aigus.
 
 Sortie WAV 24 bits, 44,1 ou 48 kHz. Un lecteur compare l'original et le résultat au même endroit (bascule A/B).
 
