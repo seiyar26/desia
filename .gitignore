@@ -5,3 +5,4 @@ tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/
+.build/
