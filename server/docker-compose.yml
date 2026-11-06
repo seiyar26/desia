@@ -1,0 +1,20 @@
+name: desia-api
+services:
+  api:
+    build: .
+    container_name: desia-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8790:8790"
+    environment:
+      OMP_NUM_THREADS: "6"
+      MKL_NUM_THREADS: "6"
+    cpus: 6
+    mem_limit: 26g
+    memswap_limit: 26g
+    volumes:
+      - desia-cache:/cache
+      - desia-data:/data
+volumes:
+  desia-cache:
+  desia-data:
