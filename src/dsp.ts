@@ -75,19 +75,67 @@ function layerAt(layer: Layer, n: number): number {
   return layer.pts[i] * (1 - s) + layer.pts[i + 1] * s;
 }
 
-function cubic(ch: Float32Array, x: number): number {
+// Interpolation par sinus cardinal fenêtré (Kaiser) : une interpolation cubique
+// laissait un résidu à -20 dB sur les aigus, audible comme un grésillement.
+const HALF = 16;
+const PHASES = 512;
+
+function bessel0(x: number): number {
+  let sum = 1;
+  let term = 1;
+  for (let k = 1; k < 30; k++) {
+    term *= (x / (2 * k)) ** 2;
+    sum += term;
+  }
+  return sum;
+}
+
+// Table de (PHASES + 1) lignes de 2·HALF coefficients ; `cutoff` < 1 filtre
+// avant un sous-échantillonnage pour éviter le repliement.
+function makeKernel(cutoff: number): Float32Array {
+  const taps = 2 * HALF;
+  const beta = 9;
+  const norm = bessel0(beta);
+  const table = new Float32Array((PHASES + 1) * taps);
+  for (let p = 0; p <= PHASES; p++) {
+    const frac = p / PHASES;
+    let sum = 0;
+    for (let j = 0; j < taps; j++) {
+      const x = j - HALF + 1 - frac;
+      const r = x / HALF;
+      const win = Math.abs(r) >= 1 ? 0 : bessel0(beta * Math.sqrt(1 - r * r)) / norm;
+      const arg = Math.PI * cutoff * x;
+      const h = (x === 0 ? 1 : Math.sin(arg) / arg) * win;
+      table[p * taps + j] = h;
+      sum += h;
+    }
+    for (let j = 0; j < taps; j++) table[p * taps + j] /= sum;
+  }
+  return table;
+}
+
+function interp(ch: Float32Array, x: number, kernel: Float32Array): number {
+  const taps = 2 * HALF;
   const i = Math.floor(x);
-  const f = x - i;
-  const a = ch[i - 1] ?? ch[i] ?? 0;
-  const b = ch[i] ?? 0;
-  const c = ch[i + 1] ?? b;
-  const d = ch[i + 2] ?? c;
-  return (
-    b * (1.5 * f * f * f - 2.5 * f * f + 1) +
-    c * (-0.5 * f * f * f + 2 * f * f + 0.5 * f) +
-    a * (-0.5 * f * f * f + f * f - 0.5 * f) +
-    d * (0.5 * f * f * f - 0.5 * f * f)
-  );
+  const pf = (x - i) * PHASES;
+  const p = Math.floor(pf);
+  const a = pf - p;
+  const k0 = p * taps;
+  const k1 = k0 + taps;
+  const first = i - HALF + 1;
+  let acc = 0;
+  if (first >= 0 && first + taps <= ch.length) {
+    for (let j = 0; j < taps; j++) {
+      acc += (kernel[k0 + j] + (kernel[k1 + j] - kernel[k0 + j]) * a) * ch[first + j];
+    }
+  } else {
+    for (let j = 0; j < taps; j++) {
+      const s = first + j;
+      if (s < 0 || s >= ch.length) continue;
+      acc += (kernel[k0 + j] + (kernel[k1 + j] - kernel[k0 + j]) * a) * ch[s];
+    }
+  }
+  return acc;
 }
 
 function warp(
@@ -104,14 +152,15 @@ function warp(
   // est l'intégrale de cette vitesse, donc un décalage borné de lfoDepth échantillons.
   const lfoRate = (2 * Math.PI * 0.09) / sr;
   const lfoDepth = (2 ** (pitchCents / 1200) - 1) / lfoRate;
+  const kernel = makeKernel(1);
   const out: Float32Array<ArrayBuffer>[] = channels.map(() => new Float32Array(len));
 
   for (let n = 0; n < len; n++) {
     const drift = layerAt(phrase, n) + layerAt(jitter, n);
     const lfo = lfoDepth * (1 - Math.cos(n * lfoRate));
-    const src = Math.max(1, Math.min(len - 3, n + lfo + drift));
+    const src = Math.max(0, Math.min(len - 1, n + lfo + drift));
     for (let c = 0; c < channels.length; c++) {
-      out[c][n] = cubic(channels[c], src);
+      out[c][n] = interp(channels[c], src, kernel);
     }
   }
   return out;
@@ -135,9 +184,11 @@ function noiseBuffer(ctx: BaseAudioContext, sr: number): AudioBuffer {
   return buf;
 }
 
-function curves(ctx: BaseAudioContext) {
+// Saturation douce de l'exciter, suréchantillonnée ×4 pour ne pas replier
+// les harmoniques créées dans l'audible.
+function exciterShaper(ctx: BaseAudioContext): WaveShaperNode {
   const soft = ctx.createWaveShaper();
-  const n = 2048;
+  const n = 4096;
   const c = new Float32Array(n);
   const k = 3;
   const norm = Math.tanh(k);
@@ -146,15 +197,8 @@ function curves(ctx: BaseAudioContext) {
     c[i] = Math.tanh(k * x) / norm;
   }
   soft.curve = c;
-
-  const clip = ctx.createWaveShaper();
-  const c2 = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;
-    c2[i] = Math.max(-0.995, Math.min(0.995, x - 0.06 * Math.pow(x, 3)));
-  }
-  clip.curve = c2;
-  return { soft, clip };
+  soft.oversample = "4x";
+  return soft;
 }
 
 function dbToGain(db: number) {
@@ -176,9 +220,11 @@ export async function process(
   onProgress(0.05, "Rééchantillonnage");
   let channels: Float32Array<ArrayBuffer>[];
   if (inRate !== sr) {
+    const ratio = inRate / sr;
+    const kernel = makeKernel(Math.min(1, sr / inRate) * 0.96);
     channels = src.map((ch) => {
       const o = new Float32Array(outLen);
-      for (let n = 0; n < outLen; n++) o[n] = cubic(ch, (n * inRate) / sr);
+      for (let n = 0; n < outLen; n++) o[n] = interp(ch, n * ratio, kernel);
       return o;
     });
   } else {
@@ -210,7 +256,7 @@ export async function process(
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = 5200;
-    const shaper = curves(ctx).soft;
+    const shaper = exciterShaper(ctx);
     const tame = ctx.createBiquadFilter();
     tame.type = "highshelf";
     tame.frequency.value = Math.min(12500, sr / 2 - 500);
@@ -292,16 +338,9 @@ export async function process(
     wobble.start();
   }
 
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -2;
-  comp.knee.value = 0;
-  comp.ratio.value = 20;
-  comp.attack.value = 0.002;
-  comp.release.value = 0.15;
-  tail.connect(comp);
-  const clip = curves(ctx).clip;
-  comp.connect(clip);
-  clip.connect(ctx.destination);
+  // Le rendu hors ligne est en virgule flottante : rien ne sature ici, la
+  // normalisation finale ramène la crête au niveau voulu sans écrêter.
+  tail.connect(ctx.destination);
   source.start();
 
   onProgress(0.6, "Rendu");
