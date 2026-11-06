@@ -582,16 +582,6 @@ h2[tabindex="-1"]:focus {
   font-weight: 800;
 }
 
-.adv__tools a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: var(--blue);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
 .adv__consent {
   margin-top: 16px;
   padding: 12px 14px;

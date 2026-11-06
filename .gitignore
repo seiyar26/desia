@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 .venv/
 .build/
+mockups/v2/
+mockups/ref-actuel.png
